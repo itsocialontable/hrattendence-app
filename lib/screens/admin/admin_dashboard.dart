@@ -30,8 +30,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
   ];
 
   final _recentEmployees = [
-    const _Employee('Rahul Sharma', 'Engineering', 'Present', true),
-    _Employee('Priya Verma', 'Design', 'Present', true),
+     _Employee('Rahul Sharma', 'Engineering', 'Present', true),
+     _Employee('Priya Verma', 'Design', 'Present', true),
     _Employee('Amit Patel', 'Marketing', 'On Leave', false),
     _Employee('Neha Singh', 'HR', 'Absent', false),
     _Employee('Karan Mehta', 'Sales', 'Present', true),
