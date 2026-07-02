@@ -39,10 +39,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
       body: _currentIndex == 0
           ? _buildHome(user)
           : _currentIndex == 1
-              ? const AdminEmployeeScreen()
-              : _currentIndex == 2
-                  ? const AdminAttendanceScreen()
-                  : const AdminSalaryCalculateScreen(),
+          ? const AdminEmployeeScreen()
+          : _currentIndex == 2
+          ? const AdminAttendanceScreen()
+          : const AdminSalaryCalculateScreen(),
       bottomNavigationBar: SafeArea(
         child: Container(
           decoration: BoxDecoration(
@@ -117,16 +117,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       child: const Icon(Icons.notifications_outlined, color: Colors.white, size: 22),
                     ),
                     Positioned(right: 8, top: 8,
-                      child: Container(width: 8, height: 8, decoration: const BoxDecoration(color: Colors.orange, shape: BoxShape.circle))),
+                        child: Container(width: 8, height: 8, decoration: const BoxDecoration(color: Colors.orange, shape: BoxShape.circle))),
                   ]),
                   const SizedBox(width: 10),
                   GestureDetector(
                     onTap: () {
                       Navigator.push(context, MaterialPageRoute(
-                        builder: (_) => Scaffold(
-                          backgroundColor: AppColors.background,
-                          body: SafeArea(child: _buildSettingsTab()),
-                        ),
+                        builder: (_) => _buildSettingsTab(),
                       ));
                     },
                     child: Container(
@@ -198,19 +195,19 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 SizedBox(height: 12,),
                 dp.isLoading
                     ? const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 24),
-                        child: Center(child: CircularProgressIndicator(color: AppColors.primary)))
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(child: CircularProgressIndicator(color: AppColors.primary)))
                     : GridView.count(
-                        padding: EdgeInsets.zero,
-                        crossAxisCount: 2,
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        mainAxisSpacing: 12,
+                  padding: EdgeInsets.zero,
+                  crossAxisCount: 2,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  mainAxisSpacing: 12,
 
-                        crossAxisSpacing: 12,
-                        childAspectRatio: 1.2,
-                        children: statItems.map((s) => _StatCard(stat: s)).toList(),
-                      ),
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 1.2,
+                  children: statItems.map((s) => _StatCard(stat: s)).toList(),
+                ),
               ]),
             ),
           ),
@@ -224,10 +221,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 const SizedBox(height: 14),
                 Row(children: [
                   Expanded(child: _QuickActionCard(icon: Icons.person_add_outlined, label: 'Add Employee', color: AppColors.secondary,
-                    onTap: () => setState(() => _currentIndex = 1))),
+                      onTap: () => setState(() => _currentIndex = 1))),
                   const SizedBox(width: 12),
                   Expanded(child: _QuickActionCard(icon: Icons.assignment_outlined, label: 'Leave Requests', color: AppColors.warning,
-                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdminLeaveScreen())))),
+                      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdminLeaveScreen())))),
                   const SizedBox(width: 12),
                   Expanded(child: _QuickActionCard(icon: Icons.download_outlined, label: 'Export Report', color: AppColors.success, onTap: () {})),
                 ]),
@@ -251,8 +248,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 dp.isLoading
                     ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
                     : stats != null
-                        ? _LiveAttendanceSummary(stats: stats)
-                        : _PlaceholderAttendance(),
+                    ? _LiveAttendanceSummary(stats: stats)
+                    : _PlaceholderAttendance(),
               ]),
             ),
           ),
@@ -262,51 +259,79 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Widget _buildSettingsTab() {
-    return Column(children: [
-      Container(
-        padding: const EdgeInsets.all(20),
-        color: Colors.white,
-        child: Row(children: [
-          Container(
-            width: 60, height: 60,
-            decoration: BoxDecoration(gradient: AppColors.primaryGradient, borderRadius: BorderRadius.circular(16)),
-            child: const Icon(Icons.admin_panel_settings, color: Colors.white, size: 30),
-          ),
-          const SizedBox(width: 16),
-          const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Administrator', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textDark)),
-            Text('admin@company.com', style: TextStyle(color: AppColors.textLight, fontSize: 13)),
-          ]),
-        ]),
-      ),
-      const Divider(height: 1),
-      Expanded(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
-          children: [
-            _SettingsTile(Icons.business_outlined, 'Company Settings', () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => AdminCompanySettingsScreen()));
-            }),
-            _SettingsTile(Icons.people_outline, 'Salary', () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => AdminSalaryScreen()));
-            }),
-            _SettingsTile(Icons.notification_add_outlined, 'Notifications', () {}),
-            _SettingsTile(Icons.lock_outline, 'Change Password', () {}),
-            const SizedBox(height: 8),
-            ListTile(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              tileColor: AppColors.errorBg,
-              leading: const Icon(Icons.logout, color: AppColors.error),
-              title: const Text('Sign Out', style: TextStyle(color: AppColors.error, fontWeight: FontWeight.w600)),
-              onTap: () {
-                context.read<AuthProvider>().logout();
-                Navigator.of(context).pushReplacementNamed('/login');
-              },
-            ),
-          ],
+    final adminUser = context.watch<AuthProvider>().user;
+    final adminName = (adminUser?.name.isNotEmpty ?? false) ? adminUser!.name : 'Administrator';
+    final adminEmail = (adminUser?.email.isNotEmpty ?? false) ? adminUser!.email : '—';
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        surfaceTintColor: Colors.white,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: AppColors.textDark),
+          onPressed: () => Navigator.of(context).pop(),
         ),
+        title: const Text('Administrator',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textDark)),
       ),
-    ]);
+      body: Column(children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          color: Colors.white,
+          child: Row(children: [
+            Container(
+              width: 68, height: 68,
+              decoration: BoxDecoration(gradient: AppColors.primaryGradient, borderRadius: BorderRadius.circular(18)),
+              child: const Icon(Icons.admin_panel_settings_rounded, color: Colors.white, size: 34),
+            ),
+            const SizedBox(width: 16),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(adminName, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.bold, color: AppColors.textDark)),
+              const SizedBox(height: 4),
+              Text(adminEmail, style: const TextStyle(color: AppColors.textLight, fontSize: 14)),
+            ])),
+          ]),
+        ),
+        const Divider(height: 1, color: AppColors.border),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 100),
+            children: [
+              _SettingsTile(Icons.business_rounded, 'Company Settings',
+                  AppColors.secondaryBg, AppColors.secondary, () {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => AdminCompanySettingsScreen()));
+                  }),
+              _SettingsTile(Icons.people_alt_rounded, 'Salary',
+                  AppColors.secondaryBg, AppColors.secondary, () {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => AdminSalaryScreen()));
+                  }),
+              _SettingsTile(Icons.notifications_rounded, 'Notifications',
+                  AppColors.warningBg, AppColors.warning, () {}),
+              _SettingsTile(Icons.lock_rounded, 'Change Password',
+                  AppColors.successBg, AppColors.success, () {}),
+              const SizedBox(height: 12),
+              GestureDetector(
+                onTap: () {
+                  context.read<AuthProvider>().logout();
+                  Navigator.of(context).pushReplacementNamed('/login');
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                  decoration: BoxDecoration(color: AppColors.errorBg, borderRadius: BorderRadius.circular(16)),
+                  child: Row(children: [
+                    const Icon(Icons.logout_rounded, color: AppColors.error, size: 20),
+                    const SizedBox(width: 14),
+                    const Text('Sign Out', style: TextStyle(color: AppColors.error, fontWeight: FontWeight.w600, fontSize: 15)),
+                  ]),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ]),
+    );
   }
 
   String _todayDate() {
@@ -422,19 +447,36 @@ class _QuickActionCard extends StatelessWidget {
 class _SettingsTile extends StatelessWidget {
   final IconData icon;
   final String label;
+  final Color iconBg;
+  final Color iconColor;
   final VoidCallback onTap;
-  const _SettingsTile(this.icon, this.label, this.onTap);
+  const _SettingsTile(this.icon, this.label, this.iconBg, this.iconColor, this.onTap);
 
   @override
   Widget build(BuildContext context) => Container(
-    margin: const EdgeInsets.only(bottom: 8),
-    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: AppShadow.subtle),
-    child: ListTile(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      leading: Icon(icon, color: AppColors.primary),
-      title: Text(label, style: const TextStyle(fontWeight: FontWeight.w500, color: AppColors.textDark)),
-      trailing: const Icon(Icons.chevron_right, color: AppColors.textLight),
-      onTap: onTap,
+    margin: const EdgeInsets.only(bottom: 12),
+    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: AppShadow.subtle),
+    child: Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(children: [
+            Container(
+              width: 44, height: 44,
+              decoration: BoxDecoration(color: iconBg, shape: BoxShape.circle),
+              child: Icon(icon, color: iconColor, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(child: Text(label,
+                style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w500, color: AppColors.textDark))),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.textLight),
+          ]),
+        ),
+      ),
     ),
   );
 }
