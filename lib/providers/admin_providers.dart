@@ -448,22 +448,28 @@ class AdminAttendanceProvider extends _BaseAdminProvider {
   AdminAttendanceProvider(this._api);
 
   List<AdminAttendanceRecord> _records = [];
+  AdminAttendanceSummary _summary = AdminAttendanceSummary(all: 0, present: 0, absent: 0, halfDay: 0, late: 0);
   String _selectedDate = '';
   String _searchQuery = '';
   String _filterStatus = 'All';
 
   List<AdminAttendanceRecord> get records => List.unmodifiable(_records);
+  AdminAttendanceSummary get summary => _summary;
   String get selectedDate => _selectedDate;
   String get searchQuery => _searchQuery;
   String get filterStatus => _filterStatus;
 
   List<AdminAttendanceRecord> get filtered {
     return _records.where((r) {
-      final q = _searchQuery.toLowerCase();
+      final q = _searchQuery.trim().toLowerCase();
       final matchSearch = q.isEmpty ||
           r.employeeName.toLowerCase().contains(q) ||
           r.userId.toLowerCase().contains(q);
-      final matchStatus = _filterStatus == 'All' || r.status == _filterStatus;
+      // "Late" / "Half Day" are flags (is_late / is_half_day) on top of
+      // status, not their own status strings — filterCategory accounts for
+      // that so all 4 chips match the right rows.
+      final matchStatus = _filterStatus == 'All' ||
+          r.filterCategory.trim().toLowerCase() == _filterStatus.trim().toLowerCase();
       return matchSearch && matchStatus;
     }).toList();
   }
@@ -492,6 +498,7 @@ class AdminAttendanceProvider extends _BaseAdminProvider {
   }
 
   Future<void> fetchAttendance({String? date, String? userId, String? month}) async {
+    if (date != null) _selectedDate = date;
     final result = await _run(
           () => _api.getAttendance(date: date, userId: userId, month: month),
       fallback: 'Failed to load attendance.',
@@ -499,7 +506,9 @@ class AdminAttendanceProvider extends _BaseAdminProvider {
     // Always update + notify, even when the API returns an empty list,
     // so the UI (loading -> empty/list state) reliably reflects the
     // latest fetch instead of silently keeping stale data on refresh.
-    _records = result ?? [];
+    _records = result?.records ?? [];
+    _summary = result?.summary ??
+        AdminAttendanceSummary.fromRecords(_records);
     notifyListeners();
   }
 
@@ -509,8 +518,11 @@ class AdminAttendanceProvider extends _BaseAdminProvider {
       fallback: 'Failed to add attendance.',
     );
     if (result != null) {
-      _records.add(result);
-      notifyListeners();
+      // Re-fetch instead of just splicing the new record into the local
+      // list — guarantees the list AND the summary counts are in sync
+      // with the server immediately, without the user needing to
+      // pull-to-refresh to see it.
+      await fetchAttendance(date: _selectedDate);
       return true;
     }
     return false;
@@ -522,9 +534,26 @@ class AdminAttendanceProvider extends _BaseAdminProvider {
       fallback: 'Failed to update attendance.',
     );
     if (result != null) {
-      final idx = _records.indexWhere((r) => r.id == id);
-      if (idx != -1) _records[idx] = result;
-      notifyListeners();
+      // Same reasoning as addManualAttendance: refresh from the server so
+      // the edited row and the summary counts update right away.
+      await fetchAttendance(date: _selectedDate);
+      return true;
+    }
+    return false;
+  }
+
+  Future<bool> deleteAttendance(String id) async {
+    final ok = await _run(
+          () async {
+        await _api.deleteAttendance(id);
+        return true;
+      },
+      fallback: 'Failed to delete attendance.',
+    );
+    if (ok == true) {
+      // Refresh from the server so the list and summary counts drop the
+      // deleted row immediately, same as add/update.
+      await fetchAttendance(date: _selectedDate);
       return true;
     }
     return false;
@@ -775,5 +804,59 @@ class AdminSettingsProvider extends _BaseAdminProvider {
       fetchAttendanceRules(),
       fetchGlobalSettings(),
     ]);
+  }
+}
+
+// ── Admin Notifications Provider ──────────────────────────────────────────────
+
+class AdminNotificationsProvider extends _BaseAdminProvider {
+  final AdminApiService _api;
+
+  AdminNotificationsProvider(this._api);
+
+  List<AdminNotification> _notifications = [];
+
+  List<AdminNotification> get notifications => List.unmodifiable(_notifications);
+  int get unreadCount => _notifications.where((n) => !n.isRead).length;
+
+  /// GET /api/notifications
+  Future<void> fetchNotifications() async {
+    final result = await _run(
+          () => _api.getNotifications(),
+      fallback: 'Failed to load notifications.',
+    );
+    if (result != null) {
+      _notifications = result;
+      notifyListeners();
+    }
+  }
+
+  /// DELETE /api/notifications/:id
+  /// Removes the item optimistically so the UI feels instant; if the
+  /// request fails, the item is put back and an error is surfaced.
+  Future<bool> deleteNotification(String id) async {
+    final index = _notifications.indexWhere((n) => n.id == id);
+    if (index == -1) return false;
+
+    final removed = _notifications[index];
+    _notifications = List.of(_notifications)..removeAt(index);
+    notifyListeners();
+
+    final result = await _run(
+          () async {
+        await _api.deleteNotification(id);
+        return true;
+      },
+      fallback: 'Failed to delete notification.',
+    );
+
+    if (result == true) {
+      return true;
+    }
+
+    // Roll back on failure.
+    _notifications = List.of(_notifications)..insert(index, removed);
+    notifyListeners();
+    return false;
   }
 }

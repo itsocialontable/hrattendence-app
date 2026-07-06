@@ -351,7 +351,7 @@ class AdminApiService {
       final res = await http
           .post(
         Uri.parse('$_baseUrl/api/forgot-password'),
-
+        headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'email': email}),
       )
           .timeout(const Duration(seconds: 60));
@@ -379,7 +379,7 @@ class AdminApiService {
       final res = await http
           .post(
         Uri.parse('$_baseUrl/api/verify-otp'),
-
+        headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'email': email, 'otp': otp}),
       )
           .timeout(const Duration(seconds: 60));
@@ -404,7 +404,7 @@ class AdminApiService {
       final res = await http
           .post(
         Uri.parse('$_baseUrl/api/resend-otp'),
-
+        headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'email': email}),
       )
           .timeout(const Duration(seconds: 60));
@@ -433,7 +433,7 @@ class AdminApiService {
       final res = await http
           .post(
         Uri.parse('$_baseUrl/api/reset-password'),
-
+        headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'email': email,
           'otp': otp,
@@ -552,7 +552,7 @@ class AdminApiService {
   // ────────────────────────────────────────────────────────────────────────────
 
   /// GET /api/attendance?date=YYYY-MM-DD&userId=
-  Future<List<AdminAttendanceRecord>> getAttendance({
+  Future<AdminAttendanceResult> getAttendance({
     String? date,
     String? userId,
     String? month,
@@ -588,9 +588,18 @@ class AdminApiService {
     final json = _decode(res);
     if (res.statusCode == 200) {
       final list = json is List ? json : (json['attendance'] ?? json['records'] ?? []);
-      return (list as List)
+      final records = (list as List)
           .map((e) => AdminAttendanceRecord.fromJson(e as Map<String, dynamic>))
           .toList();
+      // Backend sends a "summary" object alongside "records":
+      // { "summary": { "all":12, "present":8, "absent":2, "halfDay":1, "late":3 }, "records":[...] }
+      // Fall back to counting the records ourselves if it's ever missing,
+      // so older backend responses keep working.
+      final summaryJson = (json is Map) ? json['summary'] : null;
+      final summary = summaryJson is Map<String, dynamic>
+          ? AdminAttendanceSummary.fromJson(summaryJson)
+          : AdminAttendanceSummary.fromRecords(records);
+      return AdminAttendanceResult(records: records, summary: summary);
     }
     throw ApiException(
         message: _extractMessage(json, fallback: 'Failed to load attendance.'),
@@ -624,6 +633,17 @@ class AdminApiService {
     }
     throw ApiException(
         message: _extractMessage(json, fallback: 'Failed to update attendance.'),
+        statusCode: res.statusCode);
+  }
+
+  /// DELETE /api/attendance/:id — Remove an attendance record.
+  Future<void> deleteAttendance(String id) async {
+    final res = await _delete('/api/attendance/$id');
+    _checkAuth(res);
+    if (res.statusCode == 200 || res.statusCode == 204) return;
+    final json = _decode(res);
+    throw ApiException(
+        message: _extractMessage(json, fallback: 'Failed to delete attendance.'),
         statusCode: res.statusCode);
   }
 
@@ -796,6 +816,114 @@ class AdminApiService {
     }
     throw ApiException(
         message: _extractMessage(json, fallback: 'Failed to update settings.'),
+        statusCode: res.statusCode);
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // SECURITY — Change Password
+  // ────────────────────────────────────────────────────────────────────────────
+
+  /// POST /api/change-password — Change the logged-in admin's password.
+  /// Body: { oldPassword, newPassword, confirmPassword }
+  Future<String> changePassword({
+    required String oldPassword,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    final res = await _post('/api/change-password', {
+      'oldPassword': oldPassword,
+      'newPassword': newPassword,
+      'confirmPassword': confirmPassword,
+    });
+
+    if (res.statusCode == 401) {
+      // On this endpoint 401 means "current password is incorrect", not an
+      // expired session — so we deliberately don't clear the token here.
+      final json = _decode(res);
+      throw ApiException(
+        message: _extractMessage(json, fallback: 'Current password is incorrect.'),
+        statusCode: 401,
+      );
+    }
+    if (res.statusCode == 403) {
+      final json = _decode(res);
+      throw ApiException(
+        message: _extractMessage(json, fallback: 'You do not have permission to do this.'),
+        statusCode: 403,
+      );
+    }
+
+    final json = _decode(res);
+
+    if (res.statusCode == 200 || res.statusCode == 201) {
+      return _extractMessage(json, fallback: 'Password changed successfully.');
+    }
+
+    switch (res.statusCode) {
+      case 400:
+        throw ApiException(
+          message: _extractMessage(json, fallback: 'Please check the entered passwords.'),
+          statusCode: 400,
+        );
+      case 404:
+        throw ApiException(
+          message: _extractMessage(json, fallback: 'User not found.'),
+          statusCode: 404,
+        );
+      case 422:
+        throw ApiException(
+          message: _extractMessage(json, fallback: 'New password does not meet requirements.'),
+          statusCode: 422,
+        );
+      case 429:
+        throw ApiException(
+          message: 'Too many attempts. Please try again later.',
+          statusCode: 429,
+        );
+      case 500:
+      case 502:
+      case 503:
+      case 504:
+        throw ApiException(
+          message: 'Server error. Please try again later.',
+          statusCode: res.statusCode,
+        );
+      default:
+        throw ApiException(
+          message: _extractMessage(json, fallback: 'Failed to change password (${res.statusCode}).'),
+          statusCode: res.statusCode,
+        );
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // NOTIFICATIONS
+  // ────────────────────────────────────────────────────────────────────────────
+
+  /// GET /api/notifications
+  Future<List<AdminNotification>> getNotifications() async {
+    final res = await _get('/api/notifications');
+    _checkAuth(res);
+    final json = _decode(res);
+    if (res.statusCode == 200) {
+      final list = json is List ? json : (json['notifications'] ?? json['data'] ?? []);
+      return (list as List)
+          .map((e) => AdminNotification.fromJson(e as Map<String, dynamic>))
+          .toList();
+    }
+    throw ApiException(
+        message: _extractMessage(json, fallback: 'Failed to load notifications.'),
+        statusCode: res.statusCode);
+  }
+
+  /// DELETE /api/notifications/:id
+  Future<void> deleteNotification(String id) async {
+    final res = await _delete('/api/notifications/$id');
+    _checkAuth(res);
+    if (res.statusCode == 200 || res.statusCode == 201 || res.statusCode == 204) return;
+    final json = _decode(res);
+    throw ApiException(
+        message: _extractMessage(json, fallback: 'Failed to delete notification.'),
         statusCode: res.statusCode);
   }
 }

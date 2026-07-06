@@ -37,10 +37,15 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen> {
 
   List<AdminAttendanceRecord> get _filtered {
     final prov = context.read<AdminAttendanceProvider>();
+    final q = _search.trim().toLowerCase();
     return prov.records.where((r) {
-      final matchSearch = r.employeeName.toLowerCase().contains(_search.toLowerCase()) ||
-          r.userId.toLowerCase().contains(_search.toLowerCase());
-      final matchStatus = _filterStatus == 'All' || r.status == _filterStatus;
+      final matchSearch = q.isEmpty ||
+          r.employeeName.toLowerCase().contains(q) ||
+          r.userId.toLowerCase().contains(q);
+      // "Late" / "Half Day" chips match the is_late / is_half_day flags,
+      // not a literal status string — filterCategory handles that.
+      final matchStatus = _filterStatus == 'All' ||
+          r.filterCategory.trim().toLowerCase() == _filterStatus.trim().toLowerCase();
       return matchSearch && matchStatus;
     }).toList();
   }
@@ -62,6 +67,31 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen> {
     }
     if (mounted) _showSnack(
       ok ? (existing == null ? 'Attendance added manually' : 'Attendance updated') : prov.error ?? 'Failed',
+      ok ? AppColors.success : AppColors.error,
+    );
+  }
+
+  void _deleteRecord(AdminAttendanceRecord record) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Delete Attendance', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+        content: Text(
+          'Delete ${record.employeeName}\'s attendance record for $_selectedDate? This cannot be undone.',
+          style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textMid),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text('Cancel', style: GoogleFonts.poppins(color: AppColors.textMid))),
+          TextButton(onPressed: () => Navigator.pop(c, true), child: Text('Delete', style: GoogleFonts.poppins(color: AppColors.error, fontWeight: FontWeight.w600))),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final prov = context.read<AdminAttendanceProvider>();
+    final ok = await prov.deleteAttendance(record.id);
+    if (mounted) _showSnack(
+      ok ? 'Attendance record deleted' : prov.error ?? 'Failed to delete',
       ok ? AppColors.success : AppColors.error,
     );
   }
@@ -95,10 +125,15 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen> {
   Widget build(BuildContext context) {
     final prov = context.watch<AdminAttendanceProvider>();
     final filtered = prov.isLoading ? <AdminAttendanceRecord>[] : _filtered;
-    final present  = prov.records.where((r) => r.status == 'Present').length;
-    final late     = prov.records.where((r) => r.status == 'Late').length;
-    final absent   = prov.records.where((r) => r.status == 'Absent').length;
-    final halfDay  = prov.records.where((r) => r.status == 'Half Day').length;
+    // Summary counts come straight from the API's "summary" object
+    // (falls back to counting the fetched records if the backend ever
+    // omits it), instead of being recomputed here.
+    final summary  = prov.summary;
+    final all      = summary.all;
+    final present  = summary.present;
+    final late     = summary.late;
+    final absent   = summary.absent;
+    final halfDay  = summary.halfDay;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -154,12 +189,14 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen> {
                         ]),
                         const SizedBox(height: 14),
                         Row(children: [
+                          _AttStat(label: 'All', count: all, color: AppColors.white),
+                          const SizedBox(width: 6),
                           _AttStat(label: 'Present', count: present, color: AppColors.success),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 6),
                           _AttStat(label: 'Late', count: late, color: AppColors.warning),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 6),
                           _AttStat(label: 'Absent', count: absent, color: AppColors.error),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 6),
                           _AttStat(label: 'Half Day', count: halfDay, color: AppColors.accent),
                         ]),
                       ],
@@ -259,7 +296,7 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen> {
                     (_, i) => _AttendanceCard(
                   record: filtered[i],
                   onEdit: () => _addOrEdit(filtered[i]),
-                  onDelete: () {},
+                  onDelete: () => _deleteRecord(filtered[i]),
                 ),
                 childCount: filtered.length,
               )),
@@ -379,6 +416,8 @@ class _AttendanceCard extends StatelessWidget {
           const SizedBox(height: 10),
           Row(children: [
             const Spacer(),
+            _SmallBtn(icon: Icons.delete_outline_rounded, label: 'Delete', color: AppColors.error, onTap: onDelete),
+            const SizedBox(width: 8),
             _SmallBtn(icon: Icons.edit_rounded, label: 'Edit', color: AppColors.secondary, onTap: onEdit),
           ]),
         ]),
@@ -459,10 +498,33 @@ class _AttendanceFormSheetState extends State<_AttendanceFormSheet> {
     super.dispose();
   }
 
+  /// Parses a "hh:mm AM/PM" string (as shown in the Check In / Check Out
+  /// fields) into a 24-hour TimeOfDay.
+  TimeOfDay _parse12h(String t) {
+    final parts = t.split(' ');
+    final hm = parts[0].split(':');
+    var h = int.parse(hm[0]);
+    final m = int.parse(hm[1]);
+    if (parts[1] == 'PM' && h != 12) h += 12;
+    if (parts[1] == 'AM' && h == 12) h = 0;
+    return TimeOfDay(hour: h, minute: m);
+  }
+
+  /// Formats a TimeOfDay as a 24-hour "HH:mm" string — the format the
+  /// backend/API expects (it does its own server-side parsing of
+  /// checkIn/checkOut and chokes on a "hh:mm AM/PM" string).
+  String _format24h(TimeOfDay t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
   Future<void> _pickTime(TextEditingController ctrl) async {
     final picked = await showTimePicker(
       context: context, initialTime: TimeOfDay.now(),
-      builder: (c, child) => Theme(data: Theme.of(c).copyWith(colorScheme: const ColorScheme.light(primary: AppColors.primary)), child: child!),
+      // Force 24-hour dial/input so there's no separate AM/PM toggle button
+      // to forget — the selected hour (0–23) is unambiguous.
+      builder: (c, child) => MediaQuery(
+        data: MediaQuery.of(c).copyWith(alwaysUse24HourFormat: true),
+        child: Theme(data: Theme.of(c).copyWith(colorScheme: const ColorScheme.light(primary: AppColors.primary)), child: child!),
+      ),
     );
     if (picked != null) {
       final hour = picked.hourOfPeriod == 0 ? 12 : picked.hourOfPeriod;
@@ -478,16 +540,7 @@ class _AttendanceFormSheetState extends State<_AttendanceFormSheet> {
       final inText = _checkIn.text.trim();
       final outText = _checkOut.text.trim();
       if (inText.isEmpty || outText.isEmpty) return;
-      TimeOfDay parse(String t) {
-        final parts = t.split(' ');
-        final hm = parts[0].split(':');
-        var h = int.parse(hm[0]);
-        final m = int.parse(hm[1]);
-        if (parts[1] == 'PM' && h != 12) h += 12;
-        if (parts[1] == 'AM' && h == 12) h = 0;
-        return TimeOfDay(hour: h, minute: m);
-      }
-      final inT = parse(inText), outT = parse(outText);
+      final inT = _parse12h(inText), outT = _parse12h(outText);
       final totalMins = (outT.hour * 60 + outT.minute) - (inT.hour * 60 + inT.minute);
       if (totalMins > 0) {
         setState(() => _workingHours.text = '${totalMins ~/ 60}h ${(totalMins % 60).toString().padLeft(2,'0')}m');
@@ -498,21 +551,20 @@ class _AttendanceFormSheetState extends State<_AttendanceFormSheet> {
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
 
+    // Computed net working minutes from Check In / Check Out — sent to the
+    // backend as `net_mins` so it never receives NaN/undefined.
+    int netMins = 0;
+    // 24-hour "HH:mm" versions of checkIn/checkOut for the API payload —
+    // the backend parses these itself and fails on "hh:mm AM/PM" text.
+    String? apiCheckIn;
+    String? apiCheckOut;
+
     if (_status != 'Absent') {
       final inText = _checkIn.text.trim();
       final outText = _checkOut.text.trim();
       if (inText.isNotEmpty && outText.isNotEmpty) {
         try {
-          TimeOfDay parse(String t) {
-            final parts = t.split(' ');
-            final hm = parts[0].split(':');
-            var h = int.parse(hm[0]);
-            final m = int.parse(hm[1]);
-            if (parts[1] == 'PM' && h != 12) h += 12;
-            if (parts[1] == 'AM' && h == 12) h = 0;
-            return TimeOfDay(hour: h, minute: m);
-          }
-          final inT = parse(inText), outT = parse(outText);
+          final inT = _parse12h(inText), outT = _parse12h(outText);
           final totalMins =
               (outT.hour * 60 + outT.minute) - (inT.hour * 60 + inT.minute);
           if (totalMins <= 0) {
@@ -523,8 +575,14 @@ class _AttendanceFormSheetState extends State<_AttendanceFormSheet> {
             ));
             return;
           }
+          netMins = totalMins;
+          apiCheckIn = _format24h(inT);
+          apiCheckOut = _format24h(outT);
         } catch (_) {
-          // If parsing fails, let it through — backend/form validators will catch it.
+          // If parsing fails, fall back to the raw text — backend/form
+          // validators will catch it.
+          apiCheckIn = inText;
+          apiCheckOut = outText;
         }
       }
     }
@@ -532,10 +590,11 @@ class _AttendanceFormSheetState extends State<_AttendanceFormSheet> {
     Navigator.pop(context, AdminAttendanceInput(
       userId: _empId.text.trim(),
       date: widget.apiDate,
-      checkIn: _status == 'Absent' ? null : _checkIn.text.trim().isEmpty ? null : _checkIn.text.trim(),
-      checkOut: _status == 'Absent' ? null : _checkOut.text.trim().isEmpty ? null : _checkOut.text.trim(),
+      checkIn: _status == 'Absent' ? null : apiCheckIn,
+      checkOut: _status == 'Absent' ? null : apiCheckOut,
       status: _status,
       note: _note.text.trim().isEmpty ? null : _note.text.trim(),
+      netMins: netMins,
     ));
   }
 

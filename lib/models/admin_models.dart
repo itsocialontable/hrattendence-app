@@ -195,6 +195,18 @@ class AdminEmployee {
     if (aadharNo != null) 'aadhar_no': aadharNo,
     if (panNo != null) 'pan_no': panNo,
   };
+
+  // Without this, DropdownButton<AdminEmployee> compares by default
+  // (identity) equality. Every fetchEmployees() call builds a brand-new
+  // list of brand-new AdminEmployee instances, so a previously-selected
+  // employee object stops matching any item in the refreshed list —
+  // that's what throws "zero or 2+ items with the same value". Comparing
+  // by `id` keeps the selection stable across refetches.
+  @override
+  bool operator ==(Object other) => other is AdminEmployee && other.id == id;
+
+  @override
+  int get hashCode => id.hashCode;
 }
 
 class AdminEmployeeInput {
@@ -285,6 +297,8 @@ class AdminAttendanceRecord {
   final String? workingHours;
   final String status; // Present | Absent | Late | Half Day | Holiday
   final bool isManual;
+  final bool isLate;    // "is_late" — Late is a flag on top of status, not always its own status string
+  final bool isHalfDay; // "is_half_day" — same idea for Half Day
   final String? note;
 
   AdminAttendanceRecord({
@@ -298,8 +312,18 @@ class AdminAttendanceRecord {
     this.workingHours,
     required this.status,
     this.isManual = false,
+    this.isLate = false,
+    this.isHalfDay = false,
     this.note,
   });
+
+  /// Which filter chip this record belongs to. "Late" / "Half Day" come from
+  /// the is_late / is_half_day flags; everything else falls back to `status`.
+  String get filterCategory {
+    if (isLate) return 'Late';
+    if (isHalfDay) return 'Half Day';
+    return status;
+  }
 
   factory AdminAttendanceRecord.fromJson(Map<String, dynamic> j) =>
       AdminAttendanceRecord(
@@ -313,8 +337,62 @@ class AdminAttendanceRecord {
         workingHours: j['workingHours'] ?? j['working_hours'],
         status: j['status'] ?? 'Unknown',
         isManual: j['isManual'] ?? j['is_manual'] ?? false,
+        isLate: j['isLate'] ?? j['is_late'] ?? false,
+        isHalfDay: j['isHalfDay'] ?? j['is_half_day'] ?? false,
         note: j['note'],
       );
+}
+
+/// Aggregate counts for the currently selected date/range.
+/// Backend shape:
+/// { "summary": { "all": 12, "present": 8, "absent": 2, "halfDay": 1, "late": 3 } }
+class AdminAttendanceSummary {
+  final int all;
+  final int present;
+  final int absent;
+  final int halfDay;
+  final int late;
+
+  AdminAttendanceSummary({
+    required this.all,
+    required this.present,
+    required this.absent,
+    required this.halfDay,
+    required this.late,
+  });
+
+  factory AdminAttendanceSummary.fromJson(Map<String, dynamic> j) =>
+      AdminAttendanceSummary(
+        all: j['all'] ?? j['total'] ?? 0,
+        present: j['present'] ?? 0,
+        absent: j['absent'] ?? 0,
+        halfDay: j['halfDay'] ?? j['half_day'] ?? 0,
+        late: j['late'] ?? 0,
+      );
+
+  /// Derived locally from a records list when the backend doesn't send a
+  /// "summary" object, so the UI always has something to show.
+  factory AdminAttendanceSummary.fromRecords(List<AdminAttendanceRecord> records) {
+    int count(String category) => records
+        .where((r) => r.filterCategory.trim().toLowerCase() == category.toLowerCase())
+        .length;
+    return AdminAttendanceSummary(
+      all: records.length,
+      present: count('Present'),
+      absent: count('Absent'),
+      halfDay: count('Half Day'),
+      late: count('Late'),
+    );
+  }
+}
+
+/// Wrapper for GET /api/attendance so both the records list and the
+/// aggregate summary travel together.
+class AdminAttendanceResult {
+  final List<AdminAttendanceRecord> records;
+  final AdminAttendanceSummary summary;
+
+  AdminAttendanceResult({required this.records, required this.summary});
 }
 
 class AdminAttendanceInput {
@@ -324,6 +402,7 @@ class AdminAttendanceInput {
   final String? checkOut;
   final String status;
   final String? note;
+  final int? netMins;
 
   AdminAttendanceInput({
     required this.userId,
@@ -332,6 +411,7 @@ class AdminAttendanceInput {
     this.checkOut,
     required this.status,
     this.note,
+    this.netMins,
   });
 
   Map<String, dynamic> toJson() => {
@@ -341,6 +421,9 @@ class AdminAttendanceInput {
     if (checkOut != null) 'checkOut': checkOut,
     'status': status,
     if (note != null) 'note': note,
+    // Always send net_mins as a number (0 when not applicable) so the
+    // backend's Mongoose schema never receives NaN/undefined for this field.
+    'net_mins': netMins ?? 0,
   };
 }
 
@@ -419,8 +502,12 @@ class AdminSalaryRecord {
   final String userId;
   final String employeeName;
   final String department;
+  final String designation;
   final String month;
+  final String fromDate;
+  final String toDate;
   final int basicSalary;
+  final double perDaySalary;
   final int allowances;
   final int deductions;
   final int netSalary;
@@ -435,13 +522,30 @@ class AdminSalaryRecord {
   final double halfDays;
   final int lateDays;
 
+  // Full breakdown from /api/attendance/calculate-salary
+  final int daysInMonth;
+  final int sundays;
+  final int approvedLeaveDays;
+  final int unpaidLeaveDays;
+  final double halfDayDeduction;
+  final double absentDeduction;
+  final double unpaidLeaveDeduction;
+  final double totalAutoDeduction;
+  final double baseNetSalary;
+  final String message;
+  final bool success;
+
   AdminSalaryRecord({
     required this.id,
     required this.userId,
     required this.employeeName,
     required this.department,
+    this.designation = '',
     required this.month,
+    this.fromDate = '',
+    this.toDate = '',
     required this.basicSalary,
+    this.perDaySalary = 0,
     required this.allowances,
     required this.deductions,
     required this.netSalary,
@@ -453,19 +557,34 @@ class AdminSalaryRecord {
     this.absentDays = 0,
     this.halfDays = 0,
     this.lateDays = 0,
+    this.daysInMonth = 0,
+    this.sundays = 0,
+    this.approvedLeaveDays = 0,
+    this.unpaidLeaveDays = 0,
+    this.halfDayDeduction = 0,
+    this.absentDeduction = 0,
+    this.unpaidLeaveDeduction = 0,
+    this.totalAutoDeduction = 0,
+    this.baseNetSalary = 0,
+    this.message = '',
+    this.success = true,
   });
 
   factory AdminSalaryRecord.fromJson(Map<String, dynamic> j) =>
       AdminSalaryRecord(
         id: j['id'] ?? j['_id'] ?? '',
         userId: j['userId'] ?? j['user_id'] ?? '',
-        employeeName: j['employeeName'] ?? j['employee_name'] ?? j['name'] ?? '',
+        employeeName: j['employeeName'] ?? j['employee_name'] ?? j['userName'] ?? j['name'] ?? '',
         department: j['department'] ?? j['dept'] ?? '',
+        designation: j['designation'] ?? '',
         month: j['month'] ?? '',
+        fromDate: j['fromDate'] ?? j['from_date'] ?? '',
+        toDate: j['toDate'] ?? j['to_date'] ?? '',
         basicSalary: _int(j['basicSalary'] ?? j['basic_salary'] ?? j['monthlySalary'] ?? j['salary'] ?? 0),
+        perDaySalary: _dbl(j['perDaySalary'] ?? j['per_day_salary'] ?? 0),
         allowances: _int(j['allowances'] ?? 0),
-        deductions: _int(j['deductions'] ?? j['deduction'] ?? 0),
-        netSalary: _int(j['netSalary'] ?? j['net_salary'] ?? 0),
+        deductions: _int(j['deductions'] ?? j['deduction'] ?? j['totalAutoDeduction'] ?? 0),
+        netSalary: _int(j['netSalary'] ?? j['net_salary'] ?? j['baseNetSalary'] ?? 0),
         presentDays: _int(j['presentDays'] ?? j['present_days'] ?? 0),
         leaveDays: _int(j['leaveDays'] ?? j['leave_days'] ?? j['approvedLeaveDays'] ?? 0),
         status: j['status'] ?? 'pending',
@@ -477,6 +596,17 @@ class AdminSalaryRecord {
         absentDays: _dbl(j['absentDays'] ?? j['absent_days'] ?? 0),
         halfDays: _dbl(j['halfDays'] ?? j['half_days'] ?? 0),
         lateDays: _int(j['lateDays'] ?? j['late_days'] ?? 0),
+        daysInMonth: _int(j['daysInMonth'] ?? j['days_in_month'] ?? 0),
+        sundays: _int(j['sundays'] ?? 0),
+        approvedLeaveDays: _int(j['approvedLeaveDays'] ?? j['approved_leave_days'] ?? 0),
+        unpaidLeaveDays: _int(j['unpaidLeaveDays'] ?? j['unpaid_leave_days'] ?? 0),
+        halfDayDeduction: _dbl(j['halfDayDeduction'] ?? j['half_day_deduction'] ?? 0),
+        absentDeduction: _dbl(j['absentDeduction'] ?? j['absent_deduction'] ?? 0),
+        unpaidLeaveDeduction: _dbl(j['unpaidLeaveDeduction'] ?? j['unpaid_leave_deduction'] ?? 0),
+        totalAutoDeduction: _dbl(j['totalAutoDeduction'] ?? j['total_auto_deduction'] ?? 0),
+        baseNetSalary: _dbl(j['baseNetSalary'] ?? j['base_net_salary'] ?? 0),
+        message: j['message'] ?? '',
+        success: j['success'] ?? true,
       );
 }
 
@@ -660,6 +790,38 @@ class AdminGlobalSettings {
     'emailNotifications': emailNotifications,
     'autoPayroll': autoPayroll,
   };
+}
+
+// ── Admin Notification ──────────────────────────────────────────────────────
+
+class AdminNotification {
+  final String id;
+  final String title;
+  final String message;
+  final String type; // leave | attendance | salary | general | ...
+  final bool isRead;
+  final String createdAt;
+  final String? senderName;
+
+  AdminNotification({
+    required this.id,
+    required this.title,
+    required this.message,
+    required this.type,
+    required this.isRead,
+    required this.createdAt,
+    this.senderName,
+  });
+
+  factory AdminNotification.fromJson(Map<String, dynamic> j) => AdminNotification(
+    id: (j['id'] ?? j['_id'] ?? '').toString(),
+    title: j['title'] ?? j['heading'] ?? 'Notification',
+    message: j['message'] ?? j['body'] ?? j['description'] ?? j['text'] ?? '',
+    type: j['type'] ?? j['category'] ?? 'general',
+    isRead: j['isRead'] ?? j['is_read'] ?? j['read'] ?? false,
+    createdAt: j['createdAt'] ?? j['created_at'] ?? j['timestamp'] ?? j['date'] ?? '',
+    senderName: j['senderName'] ?? j['employeeName'] ?? j['userName'] ?? j['name'],
+  );
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
