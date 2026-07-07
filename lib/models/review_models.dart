@@ -66,7 +66,8 @@ class ReviewItem {
         json['reviewerName'] ??
             json['reviewer'] ??
             json['reviewedBy'] ??
-            json['managerName'],
+            json['managerName'] ??
+            json['admin_name'],
         'Manager',
       ),
       rating: _asDouble(json['rating'] ?? json['score'] ?? json['stars']),
@@ -78,7 +79,7 @@ class ReviewItem {
         'General',
       ),
       date: DateTime.tryParse(
-        _asString(json['date'] ?? json['createdAt'] ?? json['reviewDate']),
+        _asString(json['date'] ?? json['createdAt'] ?? json['reviewDate'] ?? json['given_on']),
       ),
     );
   }
@@ -88,8 +89,8 @@ class ReviewItem {
     final list = unwrapped is List
         ? unwrapped
         : (unwrapped is Map<String, dynamic>
-            ? (unwrapped['reviews'] ?? unwrapped['items'] ?? [])
-            : []);
+        ? (unwrapped['reviews'] ?? unwrapped['items'] ?? [])
+        : []);
     return (list as List)
         .whereType<Map>()
         .map((e) => ReviewItem.fromJson(Map<String, dynamic>.from(e)))
@@ -116,7 +117,11 @@ class AvgRatingData {
     }
     return AvgRatingData(
       avgRating: _asDouble(
-        json['avgRating'] ?? json['averageRating'] ?? json['rating'] ?? json['average'],
+        json['avgRating'] ??
+            json['averageRating'] ??
+            json['overallAvgRating'] ??
+            json['rating'] ??
+            json['average'],
       ),
       totalReviews: _asInt(
         json['totalReviews'] ?? json['reviewCount'] ?? json['count'],
@@ -157,7 +162,11 @@ class AttendanceRateData {
     }
     // Some backends send 0-1 fractions instead of 0-100 percentages.
     double rate = _asDouble(
-      json['attendanceRate'] ?? json['rate'] ?? json['percentage'] ?? json['percent'],
+      json['attendanceRate'] ??
+          json['overallAttendanceRate'] ??
+          json['rate'] ??
+          json['percentage'] ??
+          json['percent'],
     );
     if (rate <= 1.0) rate *= 100;
     return AttendanceRateData(
@@ -173,16 +182,29 @@ class AttendanceRateData {
 /// A single point on the performance/attendance trend graph.
 class GraphPoint {
   final String label;
-  final double value;
+  final double value; // merged value used by the single-line trend chart
+  final double avgRating; // out of 5, 0 if no reviews that month
+  final double attendanceRate; // 0-100
 
-  GraphPoint({required this.label, required this.value});
+  GraphPoint({
+    required this.label,
+    required this.value,
+    required this.avgRating,
+    required this.attendanceRate,
+  });
 
   factory GraphPoint.fromJson(Map<String, dynamic> json) {
+    final avgRating = _asDouble(json['avgRating'] ?? json['rating'] ?? json['score']);
+    final attendanceRate = _asDouble(json['attendanceRate'] ?? json['attendance']);
     return GraphPoint(
       label: _asString(
-        json['label'] ?? json['month'] ?? json['week'] ?? json['day'] ?? json['date'],
+        json['label'] ?? json['monthLabel'] ?? json['month'] ?? json['week'] ?? json['day'] ?? json['date'],
       ),
-      value: _asDouble(json['value'] ?? json['rating'] ?? json['score'] ?? json['attendanceRate']),
+      value: _asDouble(json['value']) != 0
+          ? _asDouble(json['value'])
+          : (json['avgRating'] != null ? avgRating : attendanceRate),
+      avgRating: avgRating,
+      attendanceRate: attendanceRate,
     );
   }
 }
@@ -199,7 +221,11 @@ class GraphData {
     if (unwrapped is List) {
       list = unwrapped;
     } else if (unwrapped is Map<String, dynamic>) {
-      list = (unwrapped['points'] ?? unwrapped['graph'] ?? unwrapped['series'] ?? []) as List;
+      list = (unwrapped['points'] ??
+          unwrapped['graph'] ??
+          unwrapped['series'] ??
+          unwrapped['graphData'] ??
+          []) as List;
     } else {
       list = [];
     }
@@ -250,7 +276,16 @@ class MonthlySummaryData {
     if (unwrapped is List) {
       list = unwrapped;
     } else if (unwrapped is Map<String, dynamic>) {
-      list = (unwrapped['months'] ?? unwrapped['summary'] ?? unwrapped['items'] ?? []) as List;
+      final arr = unwrapped['months'] ?? unwrapped['summary'] ?? unwrapped['items'];
+      if (arr is List) {
+        list = arr;
+      } else if (unwrapped.containsKey('month')) {
+        // Backend returns a single current-month object (not wrapped in a
+        // list) for this endpoint, e.g. {"month": "2026-07", "avgRating": 5, ...}
+        list = [unwrapped];
+      } else {
+        list = [];
+      }
     } else {
       list = [];
     }

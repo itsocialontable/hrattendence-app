@@ -7,6 +7,24 @@ import '../../providers/admin_providers.dart';
 import '../../models/admin_models.dart';
 import '../../widgets/common_widgets.dart';
 
+/// Display-only conversion: backend stores/sends checkIn/checkOut as 24-hour
+/// "HH:mm" (e.g. "21:58") — the API payload must stay in that format, so this
+/// only reformats what's shown on the attendance cards, to "hh:mm AM/PM"
+/// (e.g. "09:58 PM"). Falls back to the raw value if it isn't a plain
+/// "HH:mm" string (already AM/PM, malformed, etc.), and to a placeholder
+/// when null.
+String _displayTime(String? raw) {
+  if (raw == null || raw.trim().isEmpty) return '--:-- --';
+  final m = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(raw.trim());
+  if (m == null) return raw; // not a bare 24h "HH:mm" value — show as-is
+  final h = int.parse(m.group(1)!);
+  final min = m.group(2)!;
+  if (h < 0 || h > 23) return raw;
+  final period = h >= 12 ? 'PM' : 'AM';
+  final h12 = h % 12 == 0 ? 12 : h % 12;
+  return '${h12.toString().padLeft(2, '0')}:$min $period';
+}
+
 class AdminAttendanceScreen extends StatefulWidget {
   const AdminAttendanceScreen({super.key});
   @override
@@ -399,9 +417,9 @@ class _AttendanceCard extends StatelessWidget {
           Divider(color: AppColors.border, height: 1),
           const SizedBox(height: 12),
           Row(children: [
-            Expanded(child: _TimeBox(icon: Icons.login_rounded, label: 'Check In', time: record.checkIn ?? '--:-- --', color: AppColors.success)),
+            Expanded(child: _TimeBox(icon: Icons.login_rounded, label: 'Check In', time: _displayTime(record.checkIn), color: AppColors.success)),
             Container(width: 1, height: 40, color: AppColors.border),
-            Expanded(child: _TimeBox(icon: Icons.logout_rounded, label: 'Check Out', time: record.checkOut ?? '--:-- --', color: AppColors.error)),
+            Expanded(child: _TimeBox(icon: Icons.logout_rounded, label: 'Check Out', time: _displayTime(record.checkOut), color: AppColors.error)),
             Container(width: 1, height: 40, color: AppColors.border),
             Expanded(child: _TimeBox(icon: Icons.timer_outlined, label: 'Working Hrs', time: record.workingHours ?? '--h --m', color: AppColors.secondary)),
           ]),
@@ -562,6 +580,21 @@ class _AttendanceFormSheetState extends State<_AttendanceFormSheet> {
     if (_status != 'Absent') {
       final inText = _checkIn.text.trim();
       final outText = _checkOut.text.trim();
+      // Each time is parsed independently now — previously both were
+      // gated behind "inText.isNotEmpty && outText.isNotEmpty", so leaving
+      // Check Out blank (e.g. admin adding attendance before the employee
+      // has actually checked out yet) silently dropped the Check In value
+      // too, and the backend never received it.
+      try {
+        if (inText.isNotEmpty) apiCheckIn = _format24h(_parse12h(inText));
+      } catch (_) {
+        apiCheckIn = inText;
+      }
+      try {
+        if (outText.isNotEmpty) apiCheckOut = _format24h(_parse12h(outText));
+      } catch (_) {
+        apiCheckOut = outText;
+      }
       if (inText.isNotEmpty && outText.isNotEmpty) {
         try {
           final inT = _parse12h(inText), outT = _parse12h(outText);
@@ -576,14 +609,7 @@ class _AttendanceFormSheetState extends State<_AttendanceFormSheet> {
             return;
           }
           netMins = totalMins;
-          apiCheckIn = _format24h(inT);
-          apiCheckOut = _format24h(outT);
-        } catch (_) {
-          // If parsing fails, fall back to the raw text — backend/form
-          // validators will catch it.
-          apiCheckIn = inText;
-          apiCheckOut = outText;
-        }
+        } catch (_) {}
       }
     }
 

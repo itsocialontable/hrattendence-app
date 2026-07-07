@@ -819,7 +819,7 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
 
               // Employee picker (only for new)
               if (!_isEdit) ...[
-                _Label('Employee *'),
+                const _Label('Employee *'),
                 const SizedBox(height: 6),
                 DropdownButtonFormField<String>(
                   value: _selectedUserId,

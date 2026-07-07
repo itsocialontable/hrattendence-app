@@ -37,6 +37,7 @@ class AttendanceProvider extends ChangeNotifier {
   String? _lastHistoryDate;
   String? _lastHistoryFromDate;
   String? _lastHistoryToDate;
+  String? _lastHistoryUserId;
 
   // ── Getters ────────────────────────────────────────────────────────────────
   AttendanceState? get attendanceState => _attendanceState;
@@ -331,6 +332,7 @@ class AttendanceProvider extends ChangeNotifier {
   //  HISTORY
   // ══════════════════════════════════════════════════════════════════════════
   Future<void> fetchAttendanceHistory({
+    String? userId,
     String? date,
     String? fromDate,
     String? toDate,
@@ -339,6 +341,7 @@ class AttendanceProvider extends ChangeNotifier {
     _lastHistoryDate = date;
     _lastHistoryFromDate = fromDate;
     _lastHistoryToDate = toDate;
+    _lastHistoryUserId = userId;
 
     _isHistoryLoading = true;
     _historyError = null;
@@ -346,6 +349,7 @@ class AttendanceProvider extends ChangeNotifier {
 
     try {
       final result = await attendanceService.getAttendanceHistory(
+        userId: userId,
         date: date,
         fromDate: fromDate,
         toDate: toDate,
@@ -369,6 +373,7 @@ class AttendanceProvider extends ChangeNotifier {
   }
 
   Future<void> refreshHistory() => fetchAttendanceHistory(
+    userId: _lastHistoryUserId,
     date: _lastHistoryDate,
     fromDate: _lastHistoryFromDate,
     toDate: _lastHistoryToDate,

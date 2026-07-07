@@ -27,7 +27,7 @@ class AttendanceService {
         Uri.parse('${ApiService.baseUrl}/api/attendance/checkin'),
         headers: {
           'Authorization': 'Bearer $token',
-           'Content-Type': 'application/json',
+          'Content-Type': 'application/json',
           // 'ngrok-skip-browser-warning': 'true',
         },
         body: jsonEncode({
@@ -118,7 +118,7 @@ class AttendanceService {
         Uri.parse('${ApiService.baseUrl}/api/attendance/checkout'),
         headers: {
           'Authorization': 'Bearer $token',
-           'Content-Type': 'application/json',
+          'Content-Type': 'application/json',
           // 'ngrok-skip-browser-warning': 'true',
         },
         body: jsonEncode({
@@ -198,10 +198,12 @@ class AttendanceService {
 
   /// Get attendance history — GET /api/attendance
   /// Query params (all optional, send only what's needed):
+  ///   userId   — the employee whose history this is
   ///   date     — a single day, e.g. "2026-06-12"
   ///   fromDate — start of a range, e.g. "2026-06-01"
   ///   toDate   — end of a range, e.g. "2026-06-30"
   Future<List<AttendanceLogEntry>> getAttendanceHistory({
+    String? userId,
     String? date,
     String? fromDate,
     String? toDate,
@@ -209,6 +211,7 @@ class AttendanceService {
     final token = await apiService.getToken();
 
     final queryParams = <String, String>{
+      if (userId != null && userId.isNotEmpty) 'userId': userId,
       if (date != null && date.isNotEmpty) 'date': date,
       if (fromDate != null && fromDate.isNotEmpty) 'fromDate': fromDate,
       if (toDate != null && toDate.isNotEmpty) 'toDate': toDate,
@@ -224,7 +227,7 @@ class AttendanceService {
       response = await http.get(
         uri,
         headers: {
-           'Content-Type': 'application/json',
+          'Content-Type': 'application/json',
           // 'ngrok-skip-browser-warning': 'true',
           if (token != null) 'Authorization': 'Bearer $token',
         },

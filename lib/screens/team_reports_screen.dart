@@ -177,7 +177,7 @@ class _TeamReportsScreenState extends State<TeamReportsScreen>
         const SizedBox(height: 20),
         _buildTrendCard(bundle.graph),
         const SizedBox(height: 20),
-        _buildMonthlySummaryCard(bundle.monthlySummary),
+        _buildMonthlySummaryCard(bundle.graph),
         const SizedBox(height: 24),
         SectionHeader(title: 'Recent Reviews', action: bundle.reviews.isEmpty ? null : '${bundle.reviews.length} total'),
         const SizedBox(height: 16),
@@ -266,20 +266,86 @@ class _TeamReportsScreenState extends State<TeamReportsScreen>
     );
   }
 
-  // ── Trend line chart (animated) ────────────────────────────────────────────
+  // ── Trend card — rating pulse line with live delta chip ───────────────────
   Widget _buildTrendCard(GraphData graph) {
+    final points = graph.points;
+    final rated = points.where((p) => p.avgRating > 0).toList();
+    final latest = rated.isNotEmpty ? rated.last.avgRating : 0.0;
+    final double? delta = rated.length >= 2
+        ? rated.last.avgRating - rated[rated.length - 2].avgRating
+        : null;
+
     return PremiumCard(
       gradient: AppColors.darkGradient,
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Performance Trend',
-              style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
-          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Performance Trend',
+                      style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
+                  const SizedBox(height: 3),
+                  Text('Rating over the last ${points.length} months',
+                      style: GoogleFonts.poppins(fontSize: 11, color: Colors.white.withOpacity(0.5))),
+                ],
+              ),
+              if (rated.isNotEmpty)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(latest.toStringAsFixed(1),
+                            style: GoogleFonts.poppins(fontSize: 26, fontWeight: FontWeight.w800, color: Colors.white)),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4, left: 2),
+                          child: Text('/5', style: GoogleFonts.poppins(fontSize: 11, color: Colors.white.withOpacity(0.5))),
+                        ),
+                      ],
+                    ),
+                    if (delta != null)
+                      Container(
+                        margin: const EdgeInsets.only(top: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: (delta >= 0 ? AppColors.successLight : AppColors.errorLight).withOpacity(0.18),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              delta >= 0 ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+                              size: 11,
+                              color: delta >= 0 ? AppColors.successLight : AppColors.errorLight,
+                            ),
+                            const SizedBox(width: 2),
+                            Text(
+                              delta.abs().toStringAsFixed(1),
+                              style: GoogleFonts.poppins(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: delta >= 0 ? AppColors.successLight : AppColors.errorLight,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+            ],
+          ),
+          const SizedBox(height: 18),
           SizedBox(
             height: 150,
-            child: graph.points.length < 2
+            child: points.length < 2
                 ? Center(
               child: Text('Not enough data yet',
                   style: GoogleFonts.poppins(fontSize: 12, color: Colors.white.withOpacity(0.5))),
@@ -288,9 +354,9 @@ class _TeamReportsScreenState extends State<TeamReportsScreen>
               LineChartData(
                 gridData: FlGridData(
                   show: true,
-                  horizontalInterval: 20,
+                  horizontalInterval: 1,
                   getDrawingHorizontalLine: (v) =>
-                      FlLine(color: Colors.white.withOpacity(0.08), strokeWidth: 1),
+                      FlLine(color: Colors.white.withOpacity(0.06), strokeWidth: 1),
                   drawVerticalLine: false,
                 ),
                 titlesData: FlTitlesData(
@@ -300,39 +366,63 @@ class _TeamReportsScreenState extends State<TeamReportsScreen>
                   bottomTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
+                      reservedSize: 22,
+                      interval: 1,
                       getTitlesWidget: (val, _) {
-                        final i = val.toInt();
-                        if (i >= 0 && i < graph.points.length) {
-                          return Padding(
-                            padding: const EdgeInsets.only(top: 6),
-                            child: Text(graph.points[i].label,
-                                style: GoogleFonts.poppins(fontSize: 9, color: Colors.white.withOpacity(0.4))),
-                          );
-                        }
-                        return const SizedBox();
+                        final i = val.round();
+                        if (val != i.toDouble()) return const SizedBox();
+                        if (i < 0 || i >= points.length) return const SizedBox();
+                        final isLast = i == points.length - 1;
+                        final skip = (points.length / 6).ceil();
+                        if (!isLast && i % skip != 0) return const SizedBox();
+                        final shortLabel = points[i].label.split(' ').first;
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(
+                            shortLabel,
+                            style: GoogleFonts.poppins(
+                              fontSize: 9,
+                              fontWeight: isLast ? FontWeight.w700 : FontWeight.w400,
+                              color: isLast ? Colors.white : Colors.white.withOpacity(0.4),
+                            ),
+                          ),
+                        );
                       },
                     ),
                   ),
                 ),
                 borderData: FlBorderData(show: false),
                 minX: 0,
-                maxX: (graph.points.length - 1).toDouble(),
+                maxX: (points.length - 1).toDouble(),
                 minY: 0,
-                maxY: _niceMaxY(graph.points.map((p) => p.value).toList()),
+                maxY: 5,
                 lineBarsData: [
                   LineChartBarData(
                     spots: [
-                      for (int i = 0; i < graph.points.length; i++)
-                        FlSpot(i.toDouble(), graph.points[i].value),
+                      for (int i = 0; i < points.length; i++)
+                        FlSpot(i.toDouble(), points[i].avgRating),
                     ],
                     isCurved: true,
-                    gradient: AppColors.primaryGradient,
+                    curveSmoothness: 0.3,
+                    gradient: LinearGradient(colors: [AppColors.accentLight, Colors.white.withOpacity(0.9)]),
                     barWidth: 3,
-                    dotData: const FlDotData(show: false),
+                    dotData: FlDotData(
+                      show: true,
+                      getDotPainter: (spot, percent, bar, index) {
+                        final isLast = index == points.length - 1;
+                        final hasData = points[index].avgRating > 0;
+                        return FlDotCirclePainter(
+                          radius: isLast ? 5 : (hasData ? 2.5 : 0),
+                          color: isLast ? Colors.white : AppColors.accentLight,
+                          strokeWidth: isLast ? 3 : 0,
+                          strokeColor: Colors.white.withOpacity(0.35),
+                        );
+                      },
+                    ),
                     belowBarData: BarAreaData(
                       show: true,
                       gradient: LinearGradient(
-                        colors: [AppColors.primary.withOpacity(0.25), Colors.transparent],
+                        colors: [Colors.white.withOpacity(0.22), Colors.transparent],
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                       ),
@@ -347,97 +437,131 @@ class _TeamReportsScreenState extends State<TeamReportsScreen>
     );
   }
 
-  double _niceMaxY(List<double> values) {
-    if (values.isEmpty) return 100;
-    final maxVal = values.reduce((a, b) => a > b ? a : b);
-    if (maxVal <= 5) return 5; // looks like a 0-5 rating trend
-    if (maxVal <= 10) return 10;
-    return 100;
-  }
-
-  // ── Monthly summary grouped bar chart (animated) ──────────────────────────
-  Widget _buildMonthlySummaryCard(MonthlySummaryData summary) {
-    final months = summary.months;
+  // ── Monthly summary — scannable dual-metric progress rows ─────────────────
+  Widget _buildMonthlySummaryCard(GraphData graph) {
+    final months = graph.points;
     return PremiumCard(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Text('Monthly Summary',
+              style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.textDark)),
+          const SizedBox(height: 6),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Monthly Summary',
-                  style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.textDark)),
+              Expanded(
+                child: Text(
+                  'Last ${months.length} months at a glance',
+                  style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textLight),
+                ),
+              ),
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   _legendDot(AppColors.primary, 'Rating'),
-                  const SizedBox(width:3),
+                  const SizedBox(width: 10),
                   _legendDot(AppColors.secondary, 'Attendance'),
                 ],
               ),
             ],
           ),
-          const SizedBox(height: 18),
-          SizedBox(
-            height: 180,
-            child: months.isEmpty
-                ? Center(
-              child: Text('No monthly data yet',
-                  style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textLight)),
+          const SizedBox(height: 16),
+          if (months.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: Text('No monthly data yet',
+                    style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textLight)),
+              ),
             )
-                : BarChart(
-              BarChartData(
-                maxY: 100,
-                alignment: BarChartAlignment.spaceAround,
-                gridData: const FlGridData(show: false),
-                borderData: FlBorderData(show: false),
-                titlesData: FlTitlesData(
-                  leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (val, _) {
-                        final i = val.toInt();
-                        if (i >= 0 && i < months.length) {
-                          return Padding(
-                            padding: const EdgeInsets.only(top: 6),
-                            child: Text(months[i].month,
-                                style: GoogleFonts.poppins(fontSize: 9, color: AppColors.textLight)),
-                          );
-                        }
-                        return const SizedBox();
-                      },
-                    ),
+          else
+            Column(
+              children: [
+                for (int i = 0; i < months.length; i++) ...[
+                  _monthSummaryRow(months[i], i),
+                  if (i != months.length - 1) const SizedBox(height: 16),
+                ],
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _monthSummaryRow(GraphPoint point, int index) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: Duration(milliseconds: 550 + index * 90),
+      curve: Curves.easeOutCubic,
+      builder: (context, t, _) {
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 48,
+              child: Text(
+                point.label,
+                style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMid),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _metricBar(
+                    fraction: (point.avgRating / 5).clamp(0.0, 1.0) * t,
+                    color: AppColors.primary,
+                    valueLabel: point.avgRating > 0 ? point.avgRating.toStringAsFixed(1) : '–',
                   ),
-                ),
-                barGroups: [
-                  for (int i = 0; i < months.length; i++)
-                    BarChartGroupData(
-                      x: i,
-                      barRods: [
-                        BarChartRodData(
-                          toY: (months[i].avgRating * 20).clamp(0, 100),
-                          color: AppColors.primary,
-                          width: 8,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        BarChartRodData(
-                          toY: months[i].attendanceRate.clamp(0, 100),
-                          color: AppColors.secondary,
-                          width: 8,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ],
-                      barsSpace: 6,
-                    ),
+                  const SizedBox(height: 7),
+                  _metricBar(
+                    fraction: (point.attendanceRate / 100).clamp(0.0, 1.0) * t,
+                    color: AppColors.secondary,
+                    valueLabel: '${point.attendanceRate.toStringAsFixed(0)}%',
+                  ),
                 ],
               ),
             ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _metricBar({required double fraction, required Color color, required String valueLabel}) {
+    return Row(
+      children: [
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: Container(
+              height: 7,
+              color: color.withOpacity(0.12),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: FractionallySizedBox(
+                  widthFactor: fraction,
+                  child: Container(
+                    decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(6)),
+                  ),
+                ),
+              ),
+            ),
           ),
-        ],
-      ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 34,
+          child: Text(
+            valueLabel,
+            textAlign: TextAlign.right,
+            style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textDark),
+          ),
+        ),
+      ],
     );
   }
 

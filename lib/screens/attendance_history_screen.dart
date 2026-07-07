@@ -9,6 +9,26 @@ import '../theme/app_theme.dart';
 import '../widgets/common_widgets.dart';
 import '../models/attendance_models.dart';
 import '../providers/attendance_provider.dart';
+import '../providers/auth_provider.dart';
+
+/// Display-only conversion: backend sends checkIn/checkOut as 24-hour
+/// "HH:mm" (e.g. "15:38") — this only reformats what's shown on the card to
+/// "hh:mm AM/PM" (e.g. "03:38 PM"); the value stored/sent anywhere else is
+/// untouched. Falls back to the raw value if it isn't a plain "HH:mm"
+/// string, and to a placeholder when null/empty.
+String _displayTime(String? raw) {
+  if (raw == null || raw.trim().isEmpty || raw == '--:--' || raw == '...') {
+    return raw ?? '--:--';
+  }
+  final m = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(raw.trim());
+  if (m == null) return raw; // not a bare 24h "HH:mm" value — show as-is
+  final h = int.parse(m.group(1)!);
+  final min = m.group(2)!;
+  if (h < 0 || h > 23) return raw;
+  final period = h >= 12 ? 'PM' : 'AM';
+  final h12 = h % 12 == 0 ? 12 : h % 12;
+  return '${h12.toString().padLeft(2, '0')}:$min $period';
+}
 
 class AttendanceHistoryScreen extends StatefulWidget {
   const AttendanceHistoryScreen({super.key});
@@ -58,14 +78,16 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
   String _apiDate(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-  /// GET /api/attendance?fromDate=<1st of month>&toDate=<last of month>
+  /// GET /api/attendance?userId=<current user>&fromDate=<1st of month>&toDate=<last of month>
   Future<void> _loadMonth() async {
     final firstDay = DateTime(_selectedMonth.year, _selectedMonth.month, 1);
     final lastDay = DateTime(_selectedMonth.year, _selectedMonth.month + 1, 0);
+    final userId = context.read<AuthProvider>().user?.id;
     await context.read<AttendanceProvider>().fetchAttendanceHistory(
-          fromDate: _apiDate(firstDay),
-          toDate: _apiDate(lastDay),
-        );
+      userId: userId,
+      fromDate: _apiDate(firstDay),
+      toDate: _apiDate(lastDay),
+    );
   }
 
   void _selectMonth(int monthIndex) {
@@ -333,11 +355,11 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
         child: Row(children: [
           _buildDateBadge(entry, accentColor: accentColor),
           const SizedBox(width: 6),
-          Expanded(child: _buildTimeColumn('Clock In', entry.checkIn ?? '--:--', checkInColor)),
+          Expanded(child: _buildTimeColumn('Clock In', _displayTime(entry.checkIn), checkInColor)),
           Expanded(
             child: _buildTimeColumn(
               'Clock Out',
-              entry.checkOut ?? (entry.isPending ? '...' : '--:--'),
+              entry.checkOut != null ? _displayTime(entry.checkOut) : (entry.isPending ? '...' : '--:--'),
               checkOutColor,
             ),
           ),
