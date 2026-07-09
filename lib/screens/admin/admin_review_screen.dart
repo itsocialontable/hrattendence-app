@@ -85,9 +85,9 @@ class _AdminReviewScreenState extends State<AdminReviewScreen> {
 
   void _fetchReviews() {
     context.read<AdminReviewProvider>().fetchReviews(
-          userId: _filterUserId.isEmpty ? null : _filterUserId,
-          month: _filterMonth.isEmpty ? null : _filterMonth,
-        );
+      userId: _filterUserId.isEmpty ? null : _filterUserId,
+      month: _filterMonth.isEmpty ? null : _filterMonth,
+    );
   }
 
   // ── Snackbar ────────────────────────────────────────────────────────────────
@@ -157,7 +157,7 @@ class _AdminReviewScreenState extends State<AdminReviewScreen> {
     );
     if (ok != true || !mounted) return;
     final deleted =
-        await context.read<AdminReviewProvider>().deleteReview(review.id);
+    await context.read<AdminReviewProvider>().deleteReview(review.id);
     if (!mounted) return;
     final err = context.read<AdminReviewProvider>().mutationError;
     _snack(deleted ? 'Review deleted.' : err ?? 'Delete failed',
@@ -254,12 +254,6 @@ class _AdminReviewScreenState extends State<AdminReviewScreen> {
             ),
           ),
         ),
-        titlePadding: const EdgeInsets.only(left: 20, bottom: 14),
-        title: Text('Reviews',
-            style: GoogleFonts.poppins(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold)),
       ),
     );
   }
@@ -308,7 +302,7 @@ class _AdminReviewScreenState extends State<AdminReviewScreen> {
                   value: _filterUserId.isEmpty ? null : _filterUserId,
                   items: employees
                       .map((e) =>
-                          DropdownMenuItem(value: e.id, child: Text(e.name)))
+                      DropdownMenuItem(value: e.id, child: Text(e.name)))
                       .toList(),
                   onChanged: (v) {
                     setState(() => _filterUserId = v ?? '');
@@ -324,7 +318,7 @@ class _AdminReviewScreenState extends State<AdminReviewScreen> {
                   value: _filterMonth.isEmpty ? null : _filterMonth,
                   items: _months
                       .map((m) => DropdownMenuItem(
-                          value: m, child: Text(_monthLabel(m))))
+                      value: m, child: Text(_monthLabel(m))))
                       .toList(),
                   onChanged: (v) {
                     setState(() => _filterMonth = v ?? '');
@@ -349,14 +343,14 @@ class _AdminReviewScreenState extends State<AdminReviewScreen> {
                   if (_filterUserId.isNotEmpty)
                     _FilterChip(
                       label: employees
-                              .firstWhere((e) => e.id == _filterUserId,
-                                  orElse: () => AdminEmployee(
-                                      id: '', name: 'Employee',
-                                      username: '', email: '',
-                                      role: '', dept: '',
-                                      designation: '', salary: 0,
-                                      joinDate: ''))
-                              .name,
+                          .firstWhere((e) => e.id == _filterUserId,
+                          orElse: () => AdminEmployee(
+                              id: '', name: 'Employee',
+                              username: '', email: '',
+                              role: '', dept: '',
+                              designation: '', salary: 0,
+                              joinDate: ''))
+                          .name,
                       onRemove: () {
                         setState(() => _filterUserId = '');
                         _fetchReviews();
@@ -431,7 +425,7 @@ class _AdminReviewScreenState extends State<AdminReviewScreen> {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate(
-              (_, i) => _ReviewCard(
+                  (_, i) => _ReviewCard(
                 review: reviews[i],
                 onEdit: () => _openReviewForm(existing: reviews[i]),
                 onDelete: () => _confirmDelete(reviews[i]),
@@ -479,7 +473,7 @@ class _ReviewCard extends StatelessWidget {
             decoration: BoxDecoration(
               color: color.withOpacity(0.06),
               borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(16)),
+              const BorderRadius.vertical(top: Radius.circular(16)),
             ),
             child: Row(children: [
               // Avatar
@@ -520,9 +514,11 @@ class _ReviewCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis),
                       const SizedBox(height: 2),
                       Row(children: [
-                        _Chip(
-                            label: _categoryLabel(review.category),
-                            color: AppColors.secondary),
+                        Flexible(
+                          child: _Chip(
+                              label: _categoryLabel(review.category),
+                              color: AppColors.secondary),
+                        ),
                         const SizedBox(width: 6),
                         _Chip(
                             label: _monthLabel(review.month),
@@ -533,7 +529,7 @@ class _ReviewCard extends StatelessWidget {
               // Rating badge
               Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: color.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(10),
@@ -670,8 +666,8 @@ class _StarRow extends StatelessWidget {
           fill >= 1.0
               ? Icons.star_rounded
               : fill >= 0.5
-                  ? Icons.star_half_rounded
-                  : Icons.star_outline_rounded,
+              ? Icons.star_half_rounded
+              : Icons.star_outline_rounded,
           color: fill > 0 ? const Color(0xFFF5A623) : AppColors.neutralGreyLight,
           size: 18,
         );
@@ -831,13 +827,13 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
                           color: AppColors.textLight, fontSize: 14)),
                   items: widget.employees
                       .map((e) => DropdownMenuItem(
-                          value: e.id,
-                          child: Text(e.name,
-                              style: GoogleFonts.poppins(fontSize: 14),
-                              overflow: TextOverflow.ellipsis)))
+                      value: e.id,
+                      child: Text(e.name,
+                          style: GoogleFonts.poppins(fontSize: 14),
+                          overflow: TextOverflow.ellipsis)))
                       .toList(),
                   validator: (v) =>
-                      v == null || v.isEmpty ? 'Please select an employee' : null,
+                  v == null || v.isEmpty ? 'Please select an employee' : null,
                   onChanged: (v) => setState(() => _selectedUserId = v),
                 ),
                 const SizedBox(height: 16),
@@ -854,12 +850,12 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
                       Icons.calendar_month_outlined, 'Select month'),
                   items: widget.months
                       .map((m) => DropdownMenuItem(
-                          value: m,
-                          child: Text(_monthLabel(m),
-                              style: GoogleFonts.poppins(fontSize: 14))))
+                      value: m,
+                      child: Text(_monthLabel(m),
+                          style: GoogleFonts.poppins(fontSize: 14))))
                       .toList(),
                   validator: (v) =>
-                      v == null || v.isEmpty ? 'Please select a month' : null,
+                  v == null || v.isEmpty ? 'Please select a month' : null,
                   onChanged: (v) => setState(() => _selectedMonth = v),
                 ),
                 const SizedBox(height: 16),
@@ -872,12 +868,12 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
                 value: _selectedCategory,
                 isExpanded: true,
                 decoration:
-                    _inputDeco(Icons.category_outlined, 'Category'),
+                _inputDeco(Icons.category_outlined, 'Category'),
                 items: _kCategories
                     .map((c) => DropdownMenuItem(
-                        value: c,
-                        child: Text(_categoryLabel(c),
-                            style: GoogleFonts.poppins(fontSize: 14))))
+                    value: c,
+                    child: Text(_categoryLabel(c),
+                        style: GoogleFonts.poppins(fontSize: 14))))
                     .toList(),
                 onChanged: (v) =>
                     setState(() => _selectedCategory = v ?? 'overall'),
@@ -904,7 +900,7 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
                           onTap: () => setState(() => _rating = (i + 1).toDouble()),
                           child: Padding(
                             padding:
-                                const EdgeInsets.symmetric(horizontal: 4),
+                            const EdgeInsets.symmetric(horizontal: 4),
                             child: Icon(
                               filled
                                   ? Icons.star_rounded
@@ -1042,16 +1038,16 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
                   ),
                   child: _isSaving
                       ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                              color: Colors.white, strokeWidth: 2))
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2))
                       : Text(
-                          _isEdit ? 'Update Review' : 'Submit Review',
-                          style: GoogleFonts.poppins(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600),
-                        ),
+                    _isEdit ? 'Update Review' : 'Submit Review',
+                    style: GoogleFonts.poppins(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600),
+                  ),
                 ),
               ),
             ],
@@ -1070,34 +1066,34 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
   }
 
   InputDecoration _inputDeco(IconData? icon, String hint) => InputDecoration(
-        hintText: hint,
-        hintStyle:
-            GoogleFonts.poppins(color: AppColors.textLight, fontSize: 14),
-        prefixIcon: icon != null
-            ? Icon(icon, color: AppColors.textLight, size: 20)
-            : null,
-        filled: true,
-        fillColor: AppColors.background,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.border),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.border),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide:
-              const BorderSide(color: AppColors.primary, width: 1.5),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.error),
-        ),
-        counterStyle: GoogleFonts.poppins(
-            fontSize: 10, color: AppColors.textLight),
-      );
+    hintText: hint,
+    hintStyle:
+    GoogleFonts.poppins(color: AppColors.textLight, fontSize: 14),
+    prefixIcon: icon != null
+        ? Icon(icon, color: AppColors.textLight, size: 20)
+        : null,
+    filled: true,
+    fillColor: AppColors.background,
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: AppColors.border),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: AppColors.border),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide:
+      const BorderSide(color: AppColors.primary, width: 1.5),
+    ),
+    errorBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: AppColors.error),
+    ),
+    counterStyle: GoogleFonts.poppins(
+        fontSize: 10, color: AppColors.textLight),
+  );
 }
 
 // ── Delete Dialog ──────────────────────────────────────────────────────────────
@@ -1110,7 +1106,7 @@ class _DeleteDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return AlertDialog(
       shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       title: Row(children: [
         Container(
           padding: const EdgeInsets.all(8),
@@ -1143,7 +1139,7 @@ class _DeleteDialog extends StatelessWidget {
                 style: const TextStyle(fontWeight: FontWeight.w600)),
             const TextSpan(
                 text:
-                    '? This action cannot be undone.'),
+                '? This action cannot be undone.'),
           ],
         ),
       ),
@@ -1296,12 +1292,12 @@ class _Label extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text(
-        text,
-        style: GoogleFonts.poppins(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textDark),
-      );
+    text,
+    style: GoogleFonts.poppins(
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        color: AppColors.textDark),
+  );
 }
 
 class _Chip extends StatelessWidget {
@@ -1311,18 +1307,20 @@ class _Chip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Text(label,
-            style: GoogleFonts.poppins(
-                fontSize: 10,
-                fontWeight: FontWeight.w500,
-                color: color)),
-      );
+    padding:
+    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+    decoration: BoxDecoration(
+      color: color.withOpacity(0.1),
+      borderRadius: BorderRadius.circular(6),
+    ),
+    child: Text(label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: GoogleFonts.poppins(
+            fontSize: 10,
+            fontWeight: FontWeight.w500,
+            color: color)),
+  );
 }
 
 class _FilterChip extends StatelessWidget {
@@ -1332,28 +1330,28 @@ class _FilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        margin: const EdgeInsets.only(right: 6),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: AppColors.primaryBg,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.primary.withOpacity(0.3)),
-        ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Text(label,
-              style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.w500)),
-          const SizedBox(width: 4),
-          GestureDetector(
-            onTap: onRemove,
-            child: const Icon(Icons.close,
-                size: 14, color: AppColors.primary),
-          ),
-        ]),
-      );
+    margin: const EdgeInsets.only(right: 6),
+    padding:
+    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    decoration: BoxDecoration(
+      color: AppColors.primaryBg,
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+    ),
+    child: Row(mainAxisSize: MainAxisSize.min, children: [
+      Text(label,
+          style: GoogleFonts.poppins(
+              fontSize: 12,
+              color: AppColors.primary,
+              fontWeight: FontWeight.w500)),
+      const SizedBox(width: 4),
+      GestureDetector(
+        onTap: onRemove,
+        child: const Icon(Icons.close,
+            size: 14, color: AppColors.primary),
+      ),
+    ]),
+  );
 }
 
 class _DropdownFilter extends StatelessWidget {
@@ -1411,19 +1409,19 @@ class _DropdownFilter extends StatelessWidget {
               ),
             ]),
             ...items.map((item) => Row(children: [
-                  const SizedBox(width: 10),
-                  Icon(icon, size: 16, color: AppColors.primary),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: DefaultTextStyle(
-                      style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w500),
-                      child: item.child,
-                    ),
-                  ),
-                ])),
+              const SizedBox(width: 10),
+              Icon(icon, size: 16, color: AppColors.primary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: DefaultTextStyle(
+                  style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w500),
+                  child: item.child,
+                ),
+              ),
+            ])),
           ],
           items: [
             DropdownMenuItem<String>(
