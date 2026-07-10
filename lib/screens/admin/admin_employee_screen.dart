@@ -580,6 +580,7 @@ class _EmployeeFormSheetState extends State<_EmployeeFormSheet> {
                   _buildField('Emergency Contact', _emergencyContact, hint: '10-digit number', icon: Icons.emergency_outlined,
                       keyboardType: TextInputType.phone,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(10)]),
+                 const SizedBox(height: 60)
                 ]),
               ),
             ),
